@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="http://nakarte.me" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd" version="1.1">
+	<metadata>
+		<time>2024-05-28T20:08:45.663Z</time>
+	</metadata>
+	<trk>
+		<name>Нюд, Скитур Здоровья.</name>
+		<trkseg>
+			<trkpt lat="67.910782" lon="32.953234"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.902744" lon="32.949800"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.900064" lon="32.953062"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.899999" lon="32.956924"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.901097" lon="32.959671"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.902937" lon="32.960787"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.905326" lon="32.960958"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.906844" lon="32.959929"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.909103" lon="32.958813"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.909975" lon="32.958298"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.910427" lon="32.954693"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.910588" lon="32.952461"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.902679" lon="32.949028"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.903131" lon="32.943535"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.902744" lon="32.931604"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.901258" lon="32.929888"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.899192" lon="32.925940"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.899159" lon="32.918901"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.900709" lon="32.915897"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.903099" lon="32.916498"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.906941" lon="32.918730"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.908974" lon="32.916412"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.911460" lon="32.916327"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.914074" lon="32.924137"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+			<trkpt lat="67.918688" lon="32.917271"><time>1970-01-01T00:00:01.000Z</time></trkpt>
+		</trkseg>
+	</trk>
+</gpx>
