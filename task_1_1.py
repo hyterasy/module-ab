@@ -1,145 +1,157 @@
+
 import os
-import json
-import random
-import cv2
+import requests
 import gpxpy
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import contextily as ctx
+import json
+import random
 from sqlalchemy import create_engine, text
-from scipy import stats
 
-# Настройки БД (Пользователь:Пароль@Хост:Порт/База)
+# --- НАСТРОЙКИ ---
 DB_CONN = 'mysql+pymysql://root:root@localhost:3306/competition'
 
-class CollectorAgent:
+# !!! СЮДА ВСТАВЛЯЙ СВОИ ССЫЛКИ !!!
+# Формат: ("Имя_файла.gpx", "Ссылка на файл")
+TARGET_FILES = [
+    ("track_1.gpx", "https://raw.githubusercontent.com/stevenvandorpe/testdata/master/gps/gpx/1.gpx"), 
+    ("track_2.gpx", "https://raw.githubusercontent.com/gps-touring/sample-gpx/master/Hamburg/Alster.gpx"),
+    ("track_3.gpx", "https://raw.githubusercontent.com/jmontane/gpx-parser/master/src/test/resources/ashland.gpx"),
+    ("track_4.gpx", "https://raw.githubusercontent.com/gps-touring/sample-gpx/master/Wales/Snowdon.gpx"),
+    ("track_5.gpx", "https://raw.githubusercontent.com/stevenvandorpe/testdata/master/gps/gpx/2.gpx")
+]
+
+class DownloadAgent:
     def __init__(self):
         self.engine = create_engine(DB_CONN)
-        print("[Collector] Агент готов к работе.")
+        if not os.path.exists('tracks'):
+            os.makedirs('tracks')
 
-    def process_gpx(self, filename):
-        """Чтение GPX и расчет физических параметров"""
-        print(f"--> Читаю файл: {filename}")
-        with open(filename, 'r', encoding='utf-8') as f:
-            gpx = gpxpy.parse(f)
+    def run_cycle(self):
+        """Запускает полный цикл: Скачивание -> Обработка -> БД -> Карта"""
+        for filename, url in TARGET_FILES:
+            print(f"\n--- Работа с файлом: {filename} ---")
+            
+            # 1. Скачивание
+            local_path = self.download_file(filename, url)
+            if not local_path: continue # Если ошибка, пропускаем
+            
+            # 2. Парсинг
+            df = self.parse_gpx(local_path)
+            if df.empty: 
+                print("Файл пустой или битый, пропускаем.")
+                continue
+
+            # 3. Сохранение в БД
+            self.save_to_db(df, filename)
+
+            # 4. Рисование карты
+            self.create_map(df, filename)
+
+    def download_file(self, filename, url):
+        """Скачивает файл по ссылке"""
+        path = f"tracks/{filename}"
+        print(f"--> Скачиваю с: {url}")
+        try:
+            # Fake User-Agent чтобы сайты не блокировали скрипт
+            headers = {'User-Agent': 'Mozilla/5.0'} 
+            r = requests.get(url, headers=headers, timeout=10)
+            
+            if r.status_code == 200:
+                with open(path, 'wb') as f:
+                    f.write(r.content)
+                print(f"--> Файл сохранен: {path}")
+                return path
+            else:
+                print(f"ОШИБКА: Сайт вернул код {r.status_code}")
+                return None
+        except Exception as e:
+            print(f"ОШИБКА скачивания: {e}")
+            return None
+
+    def parse_gpx(self, filepath):
+        """Чтение GPX и расчет физики"""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                gpx = gpxpy.parse(f)
+        except Exception as e:
+            print(f"Ошибка чтения GPX: {e}")
+            return pd.DataFrame()
 
         data = []
-        for track in gpx.tracks:
-            for segment in track.segments:
-                for point in segment.points:
-                    ele = point.elevation if point.elevation is not None else 0
-                    
-                    # Физика: Температура падает на 0.6 градуса каждые 100м
-                    temp = round(25 - (ele / 100) * 0.6, 1)
-                    
+        for t in gpx.tracks:
+            for s in t.segments:
+                for p in s.points:
+                    ele = p.elevation if p.elevation else 0
                     data.append({
-                        'lat': point.latitude,
-                        'lon': point.longitude,
+                        'time': p.time,
+                        'date': p.time if p.time else pd.Timestamp.now(),
+                        'lat': p.latitude,
+                        'lon': p.longitude,
                         'ele': ele,
-                        'time': point.time,
-                        'date': point.time.date(),
-                        'temp': temp
+                        'temp': round(22 - (ele/100)*0.6, 1) # Имитация температуры
                     })
-
+        
         df = pd.DataFrame(data)
-        
-        # 1. Считаем дистанцию и скорость (векторно, через Pandas)
-        df['dist'] = np.sqrt((df['lat'].diff()*111000)**2 + (df['lon'].diff()*111000*np.cos(np.radians(df['lat'])))**2)
-        df['speed'] = (df['dist'] / df['time'].diff().dt.total_seconds()).fillna(0)
-        
-        # 2. Считаем частоту шагов (Cadence)
-        df['cadence'] = (df['speed'] * 40 + 80).astype(int)
-        df.loc[df['speed'] < 0.5, 'cadence'] = 0 # Если стоим, шагов нет
+        if df.empty: return df
 
-        # 3. Определяем местность и POI (через обычные функции)
-        df['environment'] = df['ele'].apply(self._get_environment_type)
-        df['poi'] = df.apply(self._get_poi_json, axis=1)
+        # Расчет скорости и шагов (упрощенно)
+        # Если время None, заполняем секундами по порядку
+        if df['time'].isnull().all():
+            df['time_diff'] = 1 # 1 секунда между точками
+        else:
+            df['time_diff'] = df['time'].diff().dt.total_seconds().fillna(1)
+
+        df['dist'] = np.sqrt((df['lat'].diff()*111000)**2 + (df['lon'].diff()*111000)**2).fillna(0)
+        df['speed'] = (df['dist'] / df['time_diff']).fillna(0)
+        
+        # Шаги (Cadence): если быстро - бежим, если медленно - стоим
+        df['cadence'] = (df['speed'] * 30 + 60).fillna(0).astype(int)
+        df.loc[df['speed'] < 0.5, 'cadence'] = 0
+
+        # Упрощенное окружение (1.2)
+        df['environment'] = df['ele'].apply(lambda x: 'Mountains' if x > 500 else 'Forest')
+        df['poi'] = [json.dumps(['Shop'] if random.random() < 0.05 else []) for _ in range(len(df))]
         
         return df
 
-    def _get_environment_type(self, elevation):
-        """Определяет тип местности по высоте (вместо lambda)"""
-        if elevation > 1000: return 'mountains'
-        elif elevation > 300: return 'forest'
-        elif elevation < 50: return 'swamp'
-        return 'plain'
-
-    def _get_poi_json(self, row):
-        """Генерирует список объектов JSON (вместо lambda)"""
-        # С вероятностью 10% находим пещеру
-        if random.random() < 0.1:
-            return json.dumps(['cave'])
-        return json.dumps([])
-
     def save_to_db(self, df, filename):
-        """Сохранение в MariaDB"""
+        """Запись в SQL"""
         with self.engine.connect() as conn:
-            # 1. Создаем запись о треке
-            conn.execute(text("INSERT INTO tracks (filename, region) VALUES (:f, 'Region_1')"), {"f": filename})
+            conn.execute(text("INSERT INTO tracks (filename) VALUES (:f)"), {"f": filename})
             conn.commit()
-            # 2. Получаем его ID
-            track_id = conn.execute(text("SELECT MAX(id) FROM tracks")).scalar()
+            tid = conn.execute(text("SELECT MAX(id) FROM tracks")).scalar()
 
-        df['track_id'] = track_id
-        
-        # Готовим имена колонок как в таблице БД
-        df = df.rename(columns={'ele': 'elevation', 'temp': 'temperature'})
-        cols = ['track_id', 'date', 'lat', 'lon', 'elevation', 'speed', 'cadence', 'temperature', 'environment', 'poi']
-        
-        df[cols].to_sql('track_points', self.engine, if_exists='append', index=False)
-        print(f"--> Сохранено точек: {len(df)}")
+        df['track_id'] = tid
+        # Переименование для БД
+        save_df = df.rename(columns={'ele': 'elevation', 'temp': 'temperature'})
+        # Заполняем пропуски в дате
+        save_df['date'] = save_df
 
-    def create_map(self, df, filename):
-        """Рисуем карту"""
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.plot(df['lon'], df['lat'], c='red', lw=3)
-        try:
-            ctx.add_basemap(ax, crs='EPSG:4326', source=ctx.providers.OpenStreetMap.Mapnik)
-        except: pass
-        
-        ax.axis('off')
-        img_name = f"map_{filename}.png"
-        plt.savefig(img_name, bbox_inches='tight')
-        plt.close()
-        return img_name
+DROP DATABASE IF EXISTS competition;
+CREATE DATABASE competition;
+USE competition;
 
-class AnalystAgent:
-    def analyze(self, df):
-        print("\n--- Отчет Аналитика ---")
-        # Корреляция
-        corr = df[['temp', 'ele']].corr().iloc[0, 1]
-        print(f"Корреляция Температура/Высота: {corr:.2f}")
-        # Нормальность
-        stat, p = stats.shapiro(df['cadence'].dropna()[:500])
-        result = "Нормальное" if p > 0.05 else "НЕ нормальное"
-        print(f"Распределение шагов: {result} (p={p:.5f})")
+CREATE TABLE tracks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    filename VARCHAR(255),
+    region VARCHAR(100) DEFAULT 'Russia',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-class AugmentorAgent:
-    def augment(self, img_path):
-        if not img_path: return
-        img = cv2.imread(img_path)
-        if img is None: return
-
-        print(f"--> Аугментация для: {img_path}")
-        cv2.imwrite(f"aug_rot_{img_path}", cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE))
-        cv2.imwrite(f"aug_col_{img_path}", cv2.convertScaleAbs(img, alpha=1.2, beta=30))
-        M = np.float32([[1, 0, 50], [0, 1, 50]])
-        cv2.imwrite(f"aug_mov_{img_path}", cv2.warpAffine(img, M, (img.shape[1], img.shape[0])))
-
-if __name__ == "__main__":
-    col = CollectorAgent()
-    ana = AnalystAgent()
-    aug = AugmentorAgent()
-
-    files = [f for f in os.listdir('.') if f.endswith('.gpx')]
-    if not files:
-        print("Нет файлов .gpx!")
-    else:
-        for f in files:
-            df = col.process_gpx(f)
-            col.save_to_db(df, f)
-            img = col.create_map(df, f)
-            ana.analyze(df)
-            aug.augment(img)
-            print("-" * 30)
+CREATE TABLE track_points (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    track_id INT,
+    date DATETIME,
+    lat DOUBLE,
+    lon DOUBLE,
+    elevation DOUBLE,
+    speed DOUBLE,
+    cadence INT,
+    temperature DOUBLE,
+    environment VARCHAR(50),
+    poi TEXT,
+    FOREIGN KEY (track_id) REFERENCES tracks(id)
+);
