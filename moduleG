@@ -1,0 +1,76 @@
+import uvicorn
+import joblib
+import pandas as pd
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import os
+
+# 1. ИНИЦИАЛИЗАЦИЯ
+app = FastAPI(
+    title="Risk Prediction API",
+    description="API для прогнозирования опасностей на маршруте (Модуль Г)",
+    version="1.0"
+)
+
+# Загружаем обученную модель
+MODEL_PATH = 'risk_model.pkl'
+
+if os.path.exists(MODEL_PATH):
+    model = joblib.load(MODEL_PATH)
+    print("--> Модель успешно загружена!")
+else:
+    model = None
+    print("!!! ВНИМАНИЕ: Файл модели не найден. Сначала выполни module_v.py !!!")
+
+# 2. ОПИСАНИЕ ВХОДНЫХ ДАННЫХ (Схема)
+# Эксперты смотрят, как ты валидируешь данные. Pydantic делает это за тебя.
+class TrackPoint(BaseModel):
+    lat: float
+    lon: float
+    elevation: float
+    speed: float
+    temperature: float
+
+# 3. ЭНДПОИНТЫ (Ручки API)
+
+@app.get("/")
+def read_root():
+    """Проверка работоспособности (Health Check)"""
+    return {"status": "OK", "model_loaded": model is not None}
+
+@app.post("/predict")
+def predict_risk(point: TrackPoint):
+    """
+    Главная функция: принимает точку -> возвращает риск.
+    """
+    if not model:
+        raise HTTPException(status_code=500, detail="Модель не загружена")
+
+    # Превращаем входные данные в DataFrame (как при обучении)
+    # ВАЖНО: Порядок колонок должен совпадать с тем, что был в module_v.py!
+    data = pd.DataFrame([{
+        'lat': point.lat,
+        'lon': point.lon,
+        'elevation': point.elevation,
+        'speed': point.speed,
+        'temperature': point.temperature
+    }])
+
+    # Предсказание
+    try:
+        prediction = model.predict(data)[0]
+        # Расшифровка ответа (для красоты)
+        risk_map = {0: "Safe", 1: "Flood/Evacuation Risk", 2: "Fire Risk"}
+        result = risk_map.get(prediction, "Unknown")
+        
+        return {
+            "risk_code": int(prediction),
+            "risk_description": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# ЗАПУСК СЕРВЕРА (если запускаем файл напрямую)
+if __name__ == "__main__":
+    # Host 0.0.0.0 делает API доступным в локальной сети
+    uvicorn.run(app, host="0.0.0.0", port=8000)
